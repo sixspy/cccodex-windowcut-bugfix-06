@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from audit_svc import router as audit_router
 from auth import router as auth_router
+from checkout_light_svc import router as checkout_light_router
 from db import FRONTEND, PRODUCT_META, init_db
 from hold_svc import router as hold_router
 from ingest_svc import router as ingest_router
@@ -37,6 +38,7 @@ for r in (
     late_router,
     materialize_router,
     reconcile_router,
+    checkout_light_router,
     locks_router,
     audit_router,
     hold_router,

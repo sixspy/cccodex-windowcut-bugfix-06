@@ -1,12 +1,31 @@
-"""窗内事件与物化结果互证。"""
+"""窗内事件与物化结果互证。
+
+BUGFIX-06：金额对齐走结账灯同一厘级门禁（甲路径），
+abs(差额) >= 0.01 即不对齐（灭灯），禁止任何容差放宽。
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
 from auth import AuthHeader, require_user
+from checkout_light_svc import amount_diff, evaluate_alignment
 from db import connect
 
 router = APIRouter(tags=["reconcile"])
+
+
+def _light_state(conn, wid: int) -> dict:
+    row = conn.execute(
+        "SELECT lit,diff_amount,policy FROM checkout_lights WHERE window_id=?",
+        (wid,),
+    ).fetchone()
+    if row is None:
+        return {"lit": None, "light_diff_amount": None, "light_policy": None}
+    return {
+        "lit": bool(row["lit"]),
+        "light_diff_amount": row["diff_amount"],
+        "light_policy": row["policy"],
+    }
 
 
 @router.get("/api/reconcile/{wid}")
@@ -33,12 +52,14 @@ def reconcile(wid: int, authorization: AuthHeader = None):
             "SELECT COUNT(*) c FROM reject_slips WHERE window_name=?",
             (w["name"],),
         ).fetchone()["c"]
-        # BUGFIX-06 埋雷：金额差 0.01 仍对齐
-        aligned = (
-            bool(mat)
-            and mat["row_count"] == ev["c"]
-            and abs(mat["total_amount"] - ev["s"]) < 0.05
-        )
+        # 厘级门禁：与结账灯同一口径，差 0.01 即灭（aligned=False）
+        if mat:
+            amount_ok, diff = evaluate_alignment(float(ev["s"]), float(mat["total_amount"]))
+            aligned = bool(amount_ok and mat["row_count"] == ev["c"])
+        else:
+            diff = 0.0
+            aligned = False
+        light = _light_state(conn, wid)
         return {
             "window": dict(w),
             "window_events": ev["c"],
@@ -47,6 +68,10 @@ def reconcile(wid: int, authorization: AuthHeader = None):
             "late_bucket": late,
             "rejects": rejects,
             "aligned": aligned,
+            "diff_amount": amount_diff(float(ev["s"]), float(mat["total_amount"])) if mat else 0.0,
+            "lit": light["lit"],
+            "light_diff_amount": light["light_diff_amount"],
+            "light_policy": light["light_policy"],
         }
 
 
@@ -70,19 +95,22 @@ def reconcile_all(authorization: AuthHeader = None):
                 "SELECT COUNT(*) c FROM late_bucket WHERE window_name=?",
                 (w["name"],),
             ).fetchone()["c"]
-            # BUGFIX-06 埋雷：列表对账同样放宽容差
-            aligned = (
-                bool(mat)
-                and mat["row_count"] == ev["c"]
-                and abs(mat["total_amount"] - ev["s"]) < 0.05
-            )
+            # 厘级门禁：与结账灯、单窗对账完全同态
+            if mat:
+                amount_ok, _ = evaluate_alignment(float(ev["s"]), float(mat["total_amount"]))
+                aligned = bool(amount_ok and mat["row_count"] == ev["c"])
+            else:
+                aligned = False
+            light = _light_state(conn, w["id"])
             items.append(
                 {
                     "window_id": w["id"],
                     "name": w["name"],
                     "status": w["status"],
                     "aligned": aligned,
+                    "lit": light["lit"],
                     "window_events": ev["c"],
+                    "window_amount": ev["s"],
                     "late_bucket": late,
                 }
             )

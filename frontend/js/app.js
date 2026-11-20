@@ -25,7 +25,9 @@ createApp({
     const lateItems = ref([]);
     const lateSummary = ref({});
     const audits = ref([]);
+    const diffAudits = ref([]);
     const contention = ref([]);
+    const lights = ref([]);
     const locks = ref([]);
     const holds = ref([]);
     const dash = ref({});
@@ -100,6 +102,12 @@ createApp({
       const au = await api.get("/api/audit?limit=50");
       if (au === null) return;
       audits.value = Array.isArray(au.body.items) ? au.body.items : [];
+      const da = await api.get("/api/difference-audits");
+      if (da === null) return;
+      diffAudits.value = Array.isArray(da.body.items) ? da.body.items : [];
+      const lt = await api.get("/api/checkout-lights");
+      if (lt === null) return;
+      lights.value = Array.isArray(lt.body.items) ? lt.body.items : [];
       const ct = await api.get("/api/contention");
       if (ct === null) return;
       contention.value = Array.isArray(ct.body.items) ? ct.body.items : [];
@@ -140,6 +148,25 @@ createApp({
       actionErr.value = "";
       const r = await api.post("/api/windows/" + id + "/materialize", {});
       if (r && !r.ok) actionErr.value = r.body.detail || "失败";
+      await refresh();
+    }
+
+    function lightOf(id) {
+      const row = (lights.value || []).find((l) => l.window_id === id);
+      return row ? row.lit === 1 || row.lit === true : null;
+    }
+
+    async function checkoutLight(id) {
+      actionErr.value = "";
+      const r = await api.post("/api/windows/" + id + "/checkout-light", {});
+      if (!r) return;
+      if (!r.ok) {
+        actionErr.value = r.body.detail || "点灯失败";
+      } else {
+        actionErr.value = r.body.lit
+          ? "结账灯亮：金额厘级对齐"
+          : "结账灯灭：差额 " + r.body.diff_amount + "，已写差额审计（结论不为真）";
+      }
       await refresh();
     }
 
@@ -205,8 +232,10 @@ createApp({
       lateItems,
       lateSummary,
       audits,
+      diffAudits,
       contention,
       locks,
+      lights,
       holds,
       dash,
       form,
@@ -220,6 +249,8 @@ createApp({
       ingest,
       closeWin,
       materialize,
+      checkoutLight,
+      lightOf,
       loadRecon,
       reopenStub,
       promoteLate,
@@ -250,8 +281,8 @@ createApp({
       <div class="hero-side">
         <div>迟到桶</div>
         <div class="n">{{lateSummary.count||lateEvents.length}}</div>
-        <div style="opacity:.8;margin-top:8px">对账对齐：{{recon.aligned}}</div>
-        <div style="opacity:.8">争用 {{dash.contention||0}} · 暂存 {{dash.holds||0}}</div>
+        <div style="opacity:.8;margin-top:8px">对账对齐：{{recon.aligned}} · 结账灯：<b :class="recon.lit===true?'ok':'late'">{{ recon.lit===true ? '亮' : '灭' }}</b></div>
+        <div style="opacity:.8">争用 {{dash.contention||0}} · 差额审计 {{dash.difference_audits||0}} · 暂存 {{dash.holds||0}}</div>
         <div style="margin-top:16px;font-size:12px;opacity:.75">{{user}} · <a href="#" style="color:#fff" @click.prevent="logout">退出</a></div>
       </div>
     </div>
@@ -260,6 +291,8 @@ createApp({
       <div class="stat"><div class="k">已关窗</div><div class="v">{{dash.closed_windows||0}}</div></div>
       <div class="stat"><div class="k">拒收</div><div class="v">{{dash.rejects||0}}</div></div>
       <div class="stat"><div class="k">物化单</div><div class="v">{{dash.materializations||0}}</div></div>
+      <div class="stat"><div class="k">亮灯</div><div class="v">{{dash.lights_lit||0}}</div></div>
+      <div class="stat"><div class="k">差额审计</div><div class="v">{{dash.difference_audits||0}}</div></div>
     </div>
     <div class="board">
       ${windowsViewTemplate}

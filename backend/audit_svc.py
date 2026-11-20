@@ -31,6 +31,24 @@ def audit_actions(authorization: AuthHeader = None):
         return {"items": [dict(r) for r in rows]}
 
 
+@router.get("/api/difference-audits")
+def list_difference_audits(authorization: AuthHeader = None, limit: int = 100):
+    """差额审计正式结论旁路：conclusion 为假表示差额未核准（灯必须灭）。"""
+    require_user(authorization)
+    limit = max(1, min(limit, 500))
+    with connect() as conn:
+        rows = conn.execute(
+            """SELECT * FROM difference_audits ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        items = []
+        for r in rows:
+            d = dict(r)
+            d["conclusion"] = bool(d["conclusion"])
+            items.append(d)
+        return {"items": items}
+
+
 @router.get("/api/dashboard")
 def dashboard(authorization: AuthHeader = None):
     require_user(authorization)
@@ -48,6 +66,12 @@ def dashboard(authorization: AuthHeader = None):
         ).fetchone()["c"]
         mats = conn.execute("SELECT COUNT(*) c FROM materializations").fetchone()["c"]
         contention = conn.execute("SELECT COUNT(*) c FROM contention_log").fetchone()["c"]
+        diff_audit_n = conn.execute(
+            "SELECT COUNT(*) c FROM difference_audits"
+        ).fetchone()["c"]
+        lit_n = conn.execute(
+            "SELECT COUNT(*) c FROM checkout_lights WHERE lit=1"
+        ).fetchone()["c"]
         return {
             "open_windows": open_n,
             "closed_windows": closed_n,
@@ -56,4 +80,6 @@ def dashboard(authorization: AuthHeader = None):
             "holds": hold_n,
             "materializations": mats,
             "contention": contention,
+            "difference_audits": diff_audit_n,
+            "lights_lit": lit_n,
         }

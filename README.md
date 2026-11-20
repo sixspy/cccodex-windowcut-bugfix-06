@@ -38,6 +38,17 @@
 - 窗重开作废重算 vs 增量补丁合并
 - 切版旁路暂存 vs 开始瞬间拒收
 
+## 结账灯（BUGFIX-06，甲路径：厘级门禁灭灯）
+
+口径已写入 `light_policy_ledger` 并当天冻结，库层 `CHECK(policy='甲')` 与应用层双重钉死，改走乙路径即拒写并记审计动作「灯偏了」。
+
+- 金额折整数厘（分）比较：`abs(窗内金额 − 物化金额) >= 0.01` 强制灭灯，同事务写 `difference_audits`，正式结论 `conclusion` 固定为假（0），禁止无审计差额却亮灯。
+- 点灯占灯锁 `light:{窗}`，后到者 409 且只写 `contention_log`，不写灯态业务。
+- 五处同态：结账灯 `checkout_lights`、物化台账 `materializations`、对账页 `/api/reconcile`、窗内合计明细、差额审计 `difference_audits` 与争用 `contention_log` 走同一 `evaluate_alignment` 厘级门禁。
+- 物化回执金额与台账一致，不再多报 0.01。
+
+新增接口：`POST /api/windows/{wid}/checkout-light`、`GET /api/checkout-lights`、`GET /api/light-policy`、`GET /api/difference-audits`。前端仍由原 FastAPI 服务挂载，登录与 SQLite 库文件挂载不变。
+
 ## 启动（一键）
 
 ```powershell

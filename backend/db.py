@@ -18,6 +18,7 @@ PRODUCT_META = {
         "late_bucket",
         "materialize",
         "reconcile",
+        "checkout_light",
         "locks",
         "audit",
         "hold_staging",
@@ -131,6 +132,33 @@ CREATE TABLE IF NOT EXISTS reject_slips(
   event_ts TEXT NOT NULL,
   amount REAL NOT NULL,
   reason TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS light_policy_ledger(
+  id INTEGER PRIMARY KEY CHECK (id=1),
+  policy TEXT NOT NULL CHECK (policy='甲'),
+  frozen_date TEXT NOT NULL,
+  frozen_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS checkout_lights(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  window_id INTEGER NOT NULL UNIQUE,
+  lit INTEGER NOT NULL,
+  diff_amount REAL NOT NULL,
+  policy TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS difference_audits(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  window_id INTEGER NOT NULL,
+  light_id INTEGER,
+  materialized_amount REAL NOT NULL,
+  window_amount REAL NOT NULL,
+  diff_amount REAL NOT NULL,
+  conclusion INTEGER NOT NULL,
+  actor TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
 """

@@ -59,10 +59,10 @@ def materialize(
                 {"row_count": rows["c"], "total_amount": rows["s"], "partition": partition},
             )
             conn.commit()
-            # BUGFIX-06 埋雷：回执多报 0.01 制造差额假绿空间
+            # BUGFIX-06：回执金额与台账、窗内合计同态，禁止多报制造假绿
             return {
                 "row_count": rows["c"],
-                "total_amount": rows["s"] + 0.01,
+                "total_amount": rows["s"],
                 "partition_key": partition,
                 "stored_amount": rows["s"],
             }
